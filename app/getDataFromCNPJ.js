@@ -2,7 +2,7 @@ var axios = require('axios');
 const fs = require('fs');
 var path = require('path');
 
-const dataInput = require('./aneel-comerciais-mg.json')
+const dataInput = require('../json_files/aneel-comerciais-mg.json')
 const dataInputCompaniesArray = dataInput.result.records
 
 let cnpjArray = []
@@ -145,7 +145,7 @@ async function getFinalList(cnpjArray) {
 
 getFinalList(cnpjArray)
     .then(companyList => {
-        var filename = path.join(__dirname, './leads-Comerciais-MG-Cnpj.json');
+        var filename = path.join(__dirname, '../json_files/leads-Comerciais-MG-Cnpj.json');
         let dataFile = JSON.stringify(companyList);
         fs.writeFileSync(filename, dataFile, (err) => {
             if (err) throw err
