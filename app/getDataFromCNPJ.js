@@ -1,3 +1,6 @@
+/* Esse código realiza requisições no portal cnpj rocks para obter dados a partir do cnpj e razão social
+   da empresa. O código gera um novo arquivo JSON incluindo as novas informações obtidas para cada empresa. */
+
 var axios = require('axios');
 const fs = require('fs');
 var path = require('path');
@@ -6,15 +9,11 @@ const dataInput = require('../json_files/leads-Comerciais-MG-Cnpj-Only.json')
 
 let cnpjArray = []
 let companyNameArray = []
+let errors = []
 
 
-function adaptCompanyName(companyName) {
-    let newCompanyName = companyName.toString().toLowerCase()
-    newCompanyName = newCompanyName.replace(/ /g, "-")
-    return newCompanyName
-}
 
-function getCompanyNameAndArray() {
+function getCompanyNameAndCnpjArray() {
     for (let i = 0; i < dataInput.length; i++) {
         cnpjArray.push(dataInput[i].NumCPFCNPJ)
         let companyName = dataInput[i].NomeTitularEmpreendimento
@@ -22,11 +21,20 @@ function getCompanyNameAndArray() {
         companyNameArray.push(companyName)
     }
 }
+getCompanyNameAndCnpjArray()
 
-getCompanyNameAndArray()
+// A função a seguir adapta a razão social da empresa para estar compatível com a url da requisição
+function adaptCompanyName(companyName) {
+    let newCompanyName = companyName.toString().toLowerCase()
+    newCompanyName = newCompanyName.replace(/ /g, "-")
+    newCompanyName = newCompanyName.replace(/\//g, "-")
+    return newCompanyName
+}
 
+/* A função a seguir atua para evitar que strings grandes sejam incluídas nos dados, no caso da tentativa de scrapping de uma 
+ informação que não está na página. */
 function verifyStringLength(string) {
-    if (string.length < 25) {
+    if (string.length < 40) {
         return true
     }
     else {
@@ -38,7 +46,7 @@ function isCompanyActive(htmlString) {
     let htmlStringSituation = htmlString.slice(htmlString.indexOf('<li>Situação:') + 13, htmlString.indexOf('Natureza'))
     let companySituation = htmlStringSituation.slice(htmlStringSituation.indexOf('<strong>') + 8, htmlStringSituation.indexOf('</strong>'))
     console.log(companySituation)
-    if (verifyStringLength) {
+    if (verifyStringLength(companySituation)) {
         return companySituation
     }
     else {
@@ -50,7 +58,7 @@ function getCompanyEmail(htmlString) {
     let htmlStringEmail = htmlString.slice(htmlString.indexOf('<li>E-mail:') + 11, htmlString.indexOf('<strong>Quadro'))
     let companyEmail = htmlStringEmail.slice(htmlStringEmail.indexOf('<strong>') + 8, htmlStringEmail.indexOf('</strong>'))
     console.log(companyEmail)
-    if (verifyStringLength) {
+    if (verifyStringLength(companyEmail)) {
         return companyEmail
     }
     else {
@@ -62,7 +70,7 @@ function getCompanyCapital(htmlString) {
     let htmlStringCapital = htmlString.slice(htmlString.indexOf('<li>Capital Social:') + 19, htmlString.indexOf('data-slot="4"'))
     let companyCapital = htmlStringCapital.slice(htmlStringCapital.indexOf('<strong>') + 8, htmlStringCapital.indexOf('</strong></li>'))
     console.log(companyCapital)
-    if (verifyStringLength) {
+    if (verifyStringLength(companyCapital)) {
         return companyCapital
     }
     else {
@@ -70,11 +78,11 @@ function getCompanyCapital(htmlString) {
     }
 }
 
-function getCompanyPhone(htmlString) { // Algumas empresas podem ter mais de um telefone, avaliar isso.
+function getCompanyPhone(htmlString) { 
     let htmlStringPhone = htmlString.slice(htmlString.indexOf('<li>Telefone:') + 13, htmlString.indexOf('<li>E-mail:'))
     let companyPhone = htmlStringPhone.slice(htmlStringPhone.indexOf('<strong>') + 8, htmlStringPhone.indexOf('</strong>'))
     console.log(companyPhone)
-    if (verifyStringLength) {
+    if (verifyStringLength(companyPhone)) {
         return companyPhone
     }
     else {
@@ -86,14 +94,13 @@ function getCompanyAddress(htmlString) {
     let htmlStringAddress = htmlString.slice(htmlString.indexOf('<li>CEP:') + 8, htmlString.indexOf('<li>Logradouro:'))
     let companyAddress = htmlStringAddress.slice(htmlStringAddress.indexOf('<strong>') + 8, htmlStringAddress.indexOf('</strong>'))
     console.log(companyAddress)
-    if (verifyStringLength) {
+    if (verifyStringLength(companyAddress)) {
         return companyAddress
     }
     else {
         return 'não definido'
     }
 }
-
 
 function getCompanyDataOutput(htmlString) {
     let companyDataOutput = {}
@@ -142,26 +149,43 @@ makeRequest = async (cnpj, companyName) => {
 
 async function getFinalList(cnpjArray, companyNameArray) {
     let companyList = []
-    for (i = 0; i < 2; i++) { // i deve ser menor que cnpjArray.length para pegar todos os dados
+    let newJson = []
+    for (i = 0; i < cnpjArray.length; i++) {
+        try {
         if (i % 1 == 0) { // É possível mudar a quantidade de requisições em paralelo mudando o número 1 para o número de operações paralelas desejadas. 
             await new Promise(resolve => setTimeout(resolve, 500)) // Spleep artifical pra esperar 5 segundos entre as requisições.
             companyList[i] = await makeRequest(cnpjArray[i], companyNameArray[i])
             companyList[i].Url = `https://cnpjs.rocks/cnpj/${cnpjArray[i]}/${companyNameArray[i]}.html`
+            newJson[i] = Object.assign(dataInput[i], companyList[i])
         }
         else {
             companyList[i] = await makeRequest(cnpjArray[i], companyNameArray[i])
             companyList[i].Url = `https://cnpjs.rocks/cnpj/${cnpjArray[i]}/${companyNameArray[i]}.html`
+            newJson[i] = Object.assign(dataInput[i], companyList[i])
         }
         console.log(i)
+        }
+        catch (e) {
+            errors.push({
+                url: `https://cnpjs.rocks/cnpj/${cnpjArray[i]}/${companyNameArray[i]}.html`,
+                index: i
+            })
+        }
     }
-    return companyList
+    return newJson
 }
 
 getFinalList(cnpjArray, companyNameArray)
-    .then(companyList => {
+    .then(newJson => {
         var filename = path.join(__dirname, '../json_files/leads-Comerciais-MG-Cnpj-com-email.json');
-        let dataFile = JSON.stringify(companyList);
+        let dataFile = JSON.stringify(newJson);
         fs.writeFileSync(filename, dataFile, (err) => {
             if (err) throw err
         })
+        console.log(errors)
+        var filename2 = path.join(__dirname, '../json_files/request-errors.json');
+        let dataFile2 = JSON.stringify(errors);
+        fs.writeFileSync(filename2, dataFile2, (err) => {
+            if (err) throw err;
+        });
     })

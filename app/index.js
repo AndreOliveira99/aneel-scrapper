@@ -1,10 +1,14 @@
+// Esse código realiza a requisição para a API da Aneel e disponibiliza os dados através de um arquivo Json
+
 var axios = require('axios');
 var qs = require('qs');
 const fs = require('fs');
 var path = require('path');
+
 var data = qs.stringify({
     '{"resource_id":"b1bd71e7-d0ad-4214-9053-cbd58e9564a7","q":"","filters":{"DscClasseConsumo":["Comercial"],"SigUF":["MG"]},"limit":22000,"offset":0,"total_estimation_threshold":1000}': ''
-});
+}); // configurar "limit" "DscClasseConsumo" e "SigUF" de acordo com o filtro desejado
+
 var config = {
     method: 'post',
     url: 'https://dadosabertos.aneel.gov.br/api/3/action/datastore_search',
@@ -29,7 +33,7 @@ var config = {
 
 axios(config)
     .then(function (response) {
-        var filename = path.join(__dirname, './aneel-comerciais-mg.json');
+        var filename = path.join(__dirname, '../json_files/aneel-comerciais-mg.json'); // Configurar o nome do arquivo que receberá os dados
         let dataFile = JSON.stringify(response.data);
         fs.writeFileSync(filename, dataFile, (err) => {
             if (err) throw err
